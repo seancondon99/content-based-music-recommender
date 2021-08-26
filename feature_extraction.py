@@ -2,7 +2,8 @@
 import numpy as np
 import os
 import pandas as pd
-import datetime as DT
+import matplotlib.pyplot as plt
+import json
 
 #class for processing music labels
 class labelDataset():
@@ -19,6 +20,7 @@ class labelDataset():
         '''
 
         self.path = path
+        print(f'Ingesting data at {self.path}...')
 
         #load .csv into pandas dataframe
         all_plays = pd.read_csv(self.path)
@@ -46,14 +48,20 @@ class labelDataset():
                       'Milliseconds Since Play', 'Play Duration Milliseconds','Event Start Timestamp',
                       'Event Type','Start Position In Milliseconds', 'UTC Offset In Seconds'],axis=1)
 
-        self.raw_data = self.merge_by_artist_title(all_plays)
-        print(self.raw_data.columns)
-        sorted_data = self.raw_data.sort_values('most_recent', ascending=False)
-        for i,row in sorted_data.iterrows():
-            print(f'{row["artist"]}, {row["title"]}')
-            print(f'plays: {row["n_plays"]}, time: {row["total_time"]}')
-            print(f'most recent: {row["most_recent"]}')
-            print('\n')
+
+        #merge all play data by same song and artist
+        print('Merging play data by same song+artist...')
+        self.features = self.merge_by_artist_title(all_plays)
+        # normalize the data in total_time column by calling normalize_labels method
+        print('Normalizing labels...')
+        normalized_labels = self.normalize_labels()
+        self.features['normalized_label'] = normalized_labels
+        #remove rows with nan values
+        self.features = self.features.dropna()
+        #resolve album names
+        print('resolving album names...')
+        self.resolve_albums('./song_to_album.json')
+        print('Song labels done loading / processing!\n\n')
 
 
     def merge_by_artist_title(self, all_plays):
@@ -103,6 +111,66 @@ class labelDataset():
         merged_df = pd.DataFrame(data_rows)
         return merged_df
 
+    def resolve_albums(self, album_dat_path):
+        '''
+        Optional method that takes the path to an album data csv and resolves all artist_song pairs in self.features
+        to their corresponding album. Not very useful for training a content based recommender, but fun to rank
+        all albums for least listens to most listens.
+
+        :param album_dat_path: filepath to .json file resolving song names to albums
+        :return: None, sets 'album' column in self.features
+        '''
+
+        #read album_dat_path
+        album_data = {}
+        with open(album_dat_path, 'r') as f:
+            song_list = json.load(f)
+
+        #loop through all songs, saving their album into album_data dict
+        for song in song_list:
+            try:
+                title, artist, album = song['Title'], song['Artist'], song['Album']
+                uID = f'{artist},{title}'
+                album_data[uID] = album
+            except: pass
+
+        #loop through features, resolving songs to albums
+        numResolved = 0
+        for i,row in self.features.iterrows():
+            row_uID = f'{row["artist"]},{row["title"]}'
+            if row_uID in album_data:
+                row['album'] = album_data[row_uID]
+                numResolved += 1
+        print(f'Resolved album for {numResolved} of {i} songs')
+
+    def normalize_labels(self):
+        '''
+        Takes self.features and converts the raw listening times for each songs into a normalized feature for
+        use in a neural network.
+
+        :return: y, array containing the normalized total_time values for each song
+        '''
+
+        #grab the total_time column from raw data
+        y = self.features['total_time']
+
+        #filter out nan and zero values
+        y = y[~np.isnan(y)]
+        y = y[y > 0]
+
+        #convert to log scale, transform to zero mean, and put through sigmoid activation
+        y = np.log(y)
+        mean = np.mean(y)
+        y = np.subtract(y, np.mean(y))
+        y = 1 / (1 + np.exp(np.multiply(y, -1)))
+        return y
+
+
+
+class Song():
+
+    def __init__(self,mp3_path):
+        pass
 
 
 trialDataset = labelDataset('/Users/seancondon/content-based-music-recommender/apple_music_data.csv')
