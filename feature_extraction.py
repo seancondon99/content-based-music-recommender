@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import json
 
+
 #class for processing music labels
 class labelDataset():
 
@@ -139,7 +140,7 @@ class labelDataset():
         for i,row in self.features.iterrows():
             row_uID = f'{row["artist"]},{row["title"]}'
             if row_uID in album_data:
-                row['album'] = album_data[row_uID]
+                self.features.at[i,'album'] = album_data[row_uID]
                 numResolved += 1
         print(f'Resolved album for {numResolved} of {i} songs')
 
@@ -172,5 +173,3 @@ class Song():
     def __init__(self,mp3_path):
         pass
 
-
-trialDataset = labelDataset('/Users/seancondon/content-based-music-recommender/apple_music_data.csv')
