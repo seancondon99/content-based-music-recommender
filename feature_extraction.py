@@ -4,7 +4,9 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import json
-
+import pydub
+import scipy.signal
+import librosa
 
 #class for processing music labels
 class labelDataset():
@@ -170,6 +172,101 @@ class labelDataset():
 
 class Song():
 
+    GLOBAL_SAMPLE_RATE = 20500 #allows frequencies of up to 10,250 Hz, which should be fine for this task
+
     def __init__(self,mp3_path):
-        pass
+
+        #read timeseries from mp3 file
+        self.mp3_path = mp3_path
+        self.mp3_to_timeseries()
+
+        #take the mel spectrogram of the timeseries
+        self.timeseries_to_mel_spectrogram()
+
+
+    def mp3_to_timeseries(self):
+        '''
+        Takes the self.mp3_path of a song object and coverts that mp3 file into a time series that is usable for
+        calculating mel-spectrograms. Also record the sampling frequency of the song.
+
+        :return: None, set self.timeseries
+        '''
+        print(self.mp3_path)
+        #open the audio and extract audio info using pydub
+        audio = pydub.AudioSegment.from_mp3(self.mp3_path)
+        info = pydub.utils.mediainfo(self.mp3_path)
+        sample_rate = info['sample_rate']
+        n_channels = info['channels']
+
+        #convert audio timeseries to np array, reshape to num_channels
+        y_arr = np.array(audio.get_array_of_samples())
+        y_arr = y_arr.reshape(audio.channels, -1, order='F')
+        #if stereo, average to convert to mono
+        if audio.channels > 1:
+            y_arr = np.mean(y_arr, axis = 0)
+
+        #downsample (or upsample) so that all mp3's have the same sampling rate
+        n_samples = len(y_arr) * (self.GLOBAL_SAMPLE_RATE / int(sample_rate))
+        n_samples = int(n_samples)
+        y = scipy.signal.resample(x = y_arr, num = n_samples)
+        self.timeseries = y
+
+    def timeseries_to_mel_spectrogram(self):
+        '''
+        Converts self.timeseries into a mel_spectrogram with the parameters defined below
+        Uses librosa to take fourier transform and build mel spectrogram
+
+        :return: None, adds mel_spectrogram to self.mel_sgram
+        '''
+
+        #declare mel_spectrogram hyperparameters
+        n_frames = 599
+        freq_bins = 128
+
+        #first, take the short time fourier transform of the timeseries
+        sgram = librosa.stft(self.timeseries, n_fft = 1024, hop_length = 512) #each sgram frame is ~50 ms
+
+        #then shift frequency axis to mel-scale, and shift power axis to decibel scale
+        sgram_mag, _ = librosa.magphase(sgram)
+        mel_scale_sgram = librosa.feature.melspectrogram(S=sgram_mag, sr=self.GLOBAL_SAMPLE_RATE)
+        mel_sgram = librosa.amplitude_to_db(mel_scale_sgram, ref=np.min)
+        self.mel_sgram = mel_sgram
+
+
+    def plot_timeseries(self):
+        '''
+        Helper function that uses matplotlib and librosa to plot all or part of a audio timeseries
+
+        :return: None
+        '''
+        import librosa.display
+        #only plot start_s -> end_s seconds
+        start_s, end_s = 10, 20
+        ts = self.timeseries[start_s*self.GLOBAL_SAMPLE_RATE : end_s*self.GLOBAL_SAMPLE_RATE]
+
+        #set up a new figure and use librosa.display to plot waveform
+        plt.figure(figsize=(14, 5))
+        librosa.display.waveplot(ts, sr=self.GLOBAL_SAMPLE_RATE)
+        plt.show()
+
+    def plot_spectrogram(self):
+        '''
+        Helper function that uses matplotlib and librosa to plot all or part of a mel spectrogram.
+
+        :return: None
+        '''
+        import librosa.display
+        #set the start and end frame of display
+        start_frame, end_frame = 1000, 1600
+        mel_sgram = self.mel_sgram[:, start_frame:end_frame]
+
+        #plot mel sgram using librosa and matplotlib
+        librosa.display.specshow(mel_sgram, sr=self.GLOBAL_SAMPLE_RATE, x_axis='time', y_axis='mel')
+        plt.colorbar(format='%+2.0f dB')
+        plt.show()
+
+#ex_song = Song("/Users/seancondon/content-based-music-recommender/song_data/3OH!3-Don't Trust Me.mp3")
+#ex_song.plot_spectrogram()
+
+
 
