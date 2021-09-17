@@ -173,6 +173,7 @@ class labelDataset():
 class Song():
 
     GLOBAL_SAMPLE_RATE = 20500 #allows frequencies of up to 10,250 Hz, which should be fine for this task
+    SGRAM_FRAMES = 599
 
     def __init__(self,mp3_path):
 
@@ -182,6 +183,19 @@ class Song():
 
         #take the mel spectrogram of the timeseries
         self.timeseries_to_mel_spectrogram()
+
+        #chop full spectrogram into chunks of SGRAM_FRAMES number of frames
+        n_bins, n_frames = self.mel_sgram.shape
+        init_frame = int(0.1 * n_frames)
+        end_frame = int(0.9 * n_frames)
+        n_chunks = (end_frame - init_frame) // self.SGRAM_FRAMES
+        self.chunks = []
+        chunk_start = init_frame
+        for i in range(n_chunks):
+            chunk_range = (chunk_start, chunk_start+ self.SGRAM_FRAMES)
+            chunk_start += self.SGRAM_FRAMES
+            self.chunks.append(chunk_range)
+
 
 
     def mp3_to_timeseries(self):
@@ -258,15 +272,21 @@ class Song():
         import librosa.display
         #set the start and end frame of display
         start_frame, end_frame = 1000, 1600
-        mel_sgram = self.mel_sgram[:, start_frame:end_frame]
+        #choose the chunk number to display
+        chunk_num = 1
+        start_index, end_index = self.chunks[chunk_num]
+        mel_sgram = self.mel_sgram[:, start_index:end_index]
+        print(mel_sgram.shape)
 
         #plot mel sgram using librosa and matplotlib
         librosa.display.specshow(mel_sgram, sr=self.GLOBAL_SAMPLE_RATE, x_axis='time', y_axis='mel')
         plt.colorbar(format='%+2.0f dB')
         plt.show()
 
-#ex_song = Song("/Users/seancondon/content-based-music-recommender/song_data/3OH!3-Don't Trust Me.mp3")
-#ex_song.plot_spectrogram()
+ex_song = Song("/Users/seancondon/content-based-music-recommender/song_data/3OH!3-Don't Trust Me.mp3")
+print(ex_song.mel_sgram.shape)
+print(ex_song.chunks)
+ex_song.plot_spectrogram()
 
 
 
