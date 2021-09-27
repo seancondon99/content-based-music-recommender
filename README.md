@@ -16,13 +16,5 @@ The model architecture for the recommender CNN that takes song spectrograms and 
 Examines the music listening history csv and song data directories to determine what songs still need to have their mp3 data downloaded. This file will then find mp3s for those missing songs on youtube, download them, and store them in the correct directory.
 
 ## How to Run
-
-### Downloading music listening history
-
-### Getting mp3 files
-
-### Extracting features and labels
-
-### Training the model
 This part is still under developement, please check back later!
 
